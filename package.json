@@ -1,0 +1,21 @@
+{
+  "name": "a2z-systems-performance",
+  "version": "1.0.0",
+  "description": "Systems Performance & Linux Kernel Internals, Flame by Flame — An Explorable Architecture Guide to CPU Scheduling, Memory Subsystems, Block I/O, eBPF & Flame Graphs",
+  "main": "index.html",
+  "scripts": {
+    "test": "node tests/audit-all-widgets.js"
+  },
+  "keywords": [
+    "systems-performance",
+    "linux-kernel",
+    "cfs-scheduler",
+    "ebpf",
+    "flamegraphs",
+    "io-uring",
+    "page-cache",
+    "explorable-explanation"
+  ],
+  "author": "Deep Shah",
+  "license": "MIT"
+}

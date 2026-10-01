@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Systems Performance &amp; Linux Kernel Internals, Flame by Flame — An Explorable Architectural Guide</title>
+  <meta name="description" content="An interactive, visual field guide to Linux kernel internals and systems performance engineering: from CFS CPU scheduling, TLB shootdowns, and page cache writeback to io_uring, eBPF, and Flame Graphs.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="site-head">
+  <div class="brand">
+    <span class="badge">CURRICULUM</span>
+    <span class="title">Systems Performance, Flame by Flame</span>
+  </div>
+  <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle theme">◐ Theme</button>
+</header>
+
+<section class="hero">
+  <div class="hero-text">
+    <p class="eyebrow">Interactive Systems Field Guide</p>
+    <h1>Systems Performance &amp; Linux Kernel Internals, Flame by Flame</h1>
+    <p class="lede">Synthesizing Brendan Gregg (<em>Systems Performance</em> &amp; <em>BPF Performance Tools</em>), Michael Kerrisk (<em>The Linux Programming Interface</em>), and Robert Love (<em>Linux Kernel Development</em>) into an explorable visual guide. From CFS CPU runqueues and hardware PMU topdown profiling to virtual memory TLB shootdowns, dirty page cache writeback, io_uring lockless submission queues, NAPI network softirqs, and eBPF flame graphs.</p>
+    <p class="hero-hint">↓ Scroll through the curriculum or test the live Queue Saturation &amp; USE Method Arena below.</p>
+  </div>
+  <figure class="viz viz-hero" data-viz="perfHero">
+    <figcaption>Figure 00 — Queue Saturation &amp; USE Method Arena: Modulate resource utilization rho, observe the exponential queueing delay knee ($L_q = \frac{\rho^2}{1-\rho}$), and diagnose systems bottlenecks via Utilization, Saturation, and Errors.</figcaption>
+  </figure>
+</section>
+
+<div class="layout">
+  <nav class="toc" aria-label="Table of contents">
+    <details class="toc-details" open>
+      <summary>Curriculum Index</summary>
+      <ol class="toc-list">
+        <li class="toc-part">Part I · CPU Scheduling &amp; Microarchitecture</li>
+        <li><a href="#cfs-scheduler"><span class="toc-num">01</span><span>CFS Scheduler &amp; vruntime</span></a></li>
+        <li><a href="#context-switch"><span class="toc-num">02</span><span>Context Switch Latency</span></a></li>
+        <li><a href="#perf-counters"><span class="toc-num">03</span><span>PMU &amp; Topdown Analysis</span></a></li>
+        <li><a href="#cfs-throttling"><span class="toc-num">04</span><span>cgroups v2 CPU Throttling</span></a></li>
+
+        <li class="toc-part">Part II · Memory Subsystem &amp; Paging</li>
+        <li><a href="#tlb-shootdown"><span class="toc-num">05</span><span>Page Tables &amp; TLB Shootdown</span></a></li>
+        <li><a href="#page-fault"><span class="toc-num">06</span><span>Page Fault Pipeline &amp; RSS</span></a></li>
+        <li><a href="#page-cache"><span class="toc-num">07</span><span>Page Cache &amp; Dirty Writeback</span></a></li>
+        <li><a href="#slab-allocator"><span class="toc-num">08</span><span>SLUB Allocator &amp; Freelist</span></a></li>
+
+        <li class="toc-part">Part III · Block I/O &amp; Modern Storage</li>
+        <li><a href="#block-io"><span class="toc-num">09</span><span>Block I/O Layer &amp; blk-mq</span></a></li>
+        <li><a href="#io-uring"><span class="toc-num">10</span><span>io_uring SQ/CQ Rings</span></a></li>
+        <li><a href="#ebpf-latency"><span class="toc-num">11</span><span>eBPF biolatency Histograms</span></a></li>
+
+        <li class="toc-part">Part IV · Networking &amp; Profiling</li>
+        <li><a href="#network-napi"><span class="toc-num">12</span><span>NIC DMA, NAPI &amp; SoftIRQs</span></a></li>
+        <li><a href="#sk-buff"><span class="toc-num">13</span><span>sk_buff &amp; TCP Autotuning</span></a></li>
+        <li><a href="#ebpf-engine"><span class="toc-num">14</span><span>eBPF Architecture &amp; Verifier</span></a></li>
+        <li><a href="#flame-graphs"><span class="toc-num">15</span><span>Flame Graphs: On vs Off-CPU</span></a></li>
+      </ol>
+    </details>
+  </nav>
+
+  <main class="content">
+
+    <!-- ====================================================================
+         PART I: CPU SCHEDULING & MICROARCHITECTURE
+         ==================================================================== -->
+    <header class="part-header">
+      <span class="part-eyebrow">Part I</span>
+      <h2>CPU Scheduling &amp; Microarchitecture</h2>
+      <p class="part-desc">How the Linux kernel shares physical CPU cores among thousands of threads. Completely Fair Scheduling math, context switch penalties, and hardware performance monitoring units.</p>
+    </header>
+
+    <section class="chapter" id="cfs-scheduler">
+      <div class="ch-meta"><span class="ch-num">01</span><span class="ch-tag">Scheduler Math</span></div>
+      <h3>Completely Fair Scheduler (CFS) &amp; <code>vruntime</code> Red-Black Tree</h3>
+      <p>The Linux <strong>Completely Fair Scheduler (CFS)</strong> models an "ideal multi-tasking CPU" on hardware. Instead of traditional fixed time slices, CFS tracks the <strong>virtual runtime (<code>vruntime</code>)</strong> of each runnable task. Tasks are stored in a self-balancing Red-Black Tree keyed by <code>vruntime</code>.</p>
+      <p>When a CPU core finishes executing a quantum, the kernel picks the leftmost task in the tree (the task that has consumed the least proportional execution time). When task $i$ runs for physical time $\Delta_{\text{exec}}$, its virtual runtime advances according to its nice level weight:</p>
+      $$\Delta vruntime = \Delta_{\text{exec}} \times \frac{W_{\text{NICE\_0}}}{W_i}$$
+      <p>Tasks with lower nice values (higher priority) have larger weights $W_i$, causing their <code>vruntime</code> to advance much slower—granting them significantly more CPU execution time!</p>
+      <figure class="viz" data-viz="cfsScheduler">
+        <figcaption>Figure 01 — CFS Red-Black Tree Simulator: Tick the scheduler to run the leftmost task, observe proportional vruntime advancement based on task nice weights, and inject high-priority tasks.</figcaption>
+      </figure>
+    </section>
+
+    <section class="chapter" id="context-switch">
+      <div class="ch-meta"><span class="ch-num">02</span><span class="ch-tag">CPU Overhead</span></div>
+      <h3>Context Switching Latency, Runqueues &amp; CPU Affinity</h3>
+      <p>A context switch occurs when the kernel preempts a running process to execute another. Context switches fall into two distinct categories:</p>
+      <ul>
+        <li><strong>Voluntary Context Switches:</strong> The thread blocked waiting for an unavailable resource (e.g. disk I/O, network packet, mutex lock, or <code>sleep()</code>).</li>
+        <li><strong>Involuntary Context Switches:</strong> The thread's allocated time quantum expired, or a higher-priority task woke up, forcing kernel preemption.</li>
+      </ul>
+      <p>Switching between threads in the same process is relatively cheap ($\approx 300\text{--}500\text{ ns}$) because the virtual memory address space (<code>mm_struct</code>) remains unchanged. In contrast, switching between separate processes requires rewriting the <strong>CR3 register</strong>, invalidating CPU TLB entries and causing cold cache misses across L1 and L2 caches ($\approx 1.5\text{--}5\text{ }\mu\text{s}$).</p>
+      <figure class="viz" data-viz="contextSwitch">
+        <figcaption>Figure 02 — Context Switch Architecture: Inspect register save operations, CR3 address space swaps, TLB invalidation penalties, and cross-core affinity migration.</figcaption>
+      </figure>
+    </section>
+
+    <section class="chapter" id="perf-counters">
+      <div class="ch-meta"><span class="ch-num">03</span><span class="ch-tag">PMU Profiling</span></div>
+      <h3>Hardware Performance Counters (PMU) &amp; Topdown Analysis</h3>
+      <p>Modern microprocessors contain dedicated <strong>Performance Monitoring Units (PMUs)</strong> capable of counting low-level microarchitectural events (CPU cycles, instructions retired, cache misses, branch mispredictions) without software instrumentation overhead.</p>
+      <p>The industry-standard <strong>Topdown Microarchitecture Analysis Method (Ahmad Yasin, Intel)</strong> categorizes every pipeline execution slot into four mutually exclusive buckets:</p>
+      <ul>
+        <li><strong>Retiring (&gt; 50% ideal):</strong> Slots executing instructions that successfully commit useful architectural state.</li>
+        <li><strong>Bad Speculation:</strong> Slots wasted executing speculative instructions along mispredicted branch paths that were later discarded.</li>
+        <li><strong>Frontend Bound:</strong> The CPU fetch and decode pipeline failed to deliver micro-ops to the execution engine.</li>
+        <li><strong>Backend Bound:</strong> Execution units stalled waiting for memory operands (L3 LLC misses, DRAM latency) or functional unit resource contention.</li>
+      </ul>
+      <figure class="viz" data-viz="perfCounters">
+        <figcaption>Figure 03 — Topdown Microarchitecture Analyzer: Profile IPC (Instructions Per Cycle) and inspect pipeline slot allocation across Retiring, Bad Speculation, Frontend, and Backend bottlenecks.</figcaption>
+      </figure>
+    </section>
+
+    <section class="chapter" id="cfs-throttling">
+      <div class="ch-meta"><span class="ch-num">04</span><span class="ch-tag">cgroups v2</span></div>
+      <h3>Linux CPU Throttling: CFS Bandwidth Control &amp; cgroups v2</h3>
+      <p>In containerized production environments (Kubernetes, Docker), CPU limits are enforced via <strong>cgroups CFS Bandwidth Control</strong> (<code>cpu.max = quota period</code>, typically <code>quota / 100000</code>). When a container consumes its entire quota before the end of the 100ms period, the Linux kernel completely suspends all container threads until the next period begins.</p>
+      <p>This causes catastrophic tail latency spikes (e.g. p99 jumping from 5ms to 80ms) even when average CPU utilization across the node is only 25%! Systems engineers monitor <code>/sys/fs/cgroup/cpu.stat</code> (<code>nr_throttled</code> and <code>throttled_usec</code>) to detect quota starvation.</p>
+      <figure class="viz" data-viz="cfsThrottling">
+        <figcaption>Figure 04 — cgroups v2 CFS Bandwidth Throttling: Modulate container CPU quota and demand per 100ms slice, and trace hard execution freezes and tail latency spikes.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ====================================================================
+         PART II: MEMORY SUBSYSTEM & PAGING
+         ==================================================================== -->
+    <header class="part-header">
+      <span class="part-eyebrow">Part II</span>
+      <h2>Memory Subsystem &amp; Paging</h2>
+      <p class="part-desc">How Linux maps virtual address spaces to physical RAM. Page table walks, TLB shootdowns, copy-on-write page faults, and kernel page cache writeback.</p>
+    </header>
+
+    <section class="chapter" id="tlb-shootdown">
+      <div class="ch-meta"><span class="ch-num">05</span><span class="ch-tag">Virtual Memory</span></div>
+      <h3>Page Tables, Translation Lookaside Buffer &amp; TLB Shootdowns</h3>
+      <p>On x86_64 architecture, translating a 48-bit virtual address to a physical RAM address requires walking a 4-level hierarchical page table structure: <strong>PML4 $\rightarrow$ PDPT $\rightarrow$ PD $\rightarrow$ PT</strong>. A page walk costs up to 4 sequential DRAM reads ($\approx 150\text{--}200\text{ cycles}$).</p>
+      <p>The <strong>Translation Lookaside Buffer (TLB)</strong> caches these translations, delivering single-cycle address lookups. However, when a thread frees or remaps memory (via <code>munmap()</code> or compaction), the kernel must guarantee no other CPU core holds stale translations in its local TLB. The kernel initiates a <strong>TLB Shootdown</strong>, sending Inter-Processor Interrupts (IPIs) across the memory bus to stall all remote cores until they flush their local TLB entries.</p>
+      <figure class="viz" data-viz="tlbShootdown">
+        <figcaption>Figure 05 — x86_64 Page Walk &amp; TLB Shootdown: Trace 4-level page table hierarchy lookups and simulate multi-core Inter-Processor Interrupt (IPI) invalidation stalls.</figcaption>
+      </figure>
+    </section>
+
+    <section class="chapter" id="page-fault">
+      <div class="ch-meta"><span class="ch-num">06</span><span class="ch-tag">Page Faults</span></div>
+      <h3>The Page Fault Pipeline: Minor vs. Major Faults &amp; RSS</h3>
+      <p>When an application calls <code>malloc()</code> or <code>mmap()</code>, the kernel modifies the process Virtual Memory Area (VMA) but allocates <em>zero physical memory</em>. Physical RAM is allocated lazily on the first byte read or write, triggering a Hardware Page Fault interrupt:</p>
+      <ul>
+        <li><strong>Minor Page Fault:</strong> The requested page already resides in RAM (e.g. demand-zero allocation, shared library page in page cache, or Copy-on-Write page duplicate after <code>fork()</code>). Resolved purely in CPU kernel space in a few microseconds without disk I/O.</li>
+        <li><strong>Major Page Fault:</strong> The requested page must be loaded from persistent storage (e.g. swapped-out memory page or unmapped executable binary sector). The calling thread is suspended into uninterruptible sleep (<code>D</code> state) for milliseconds until disk read completes.</li>
+      </ul>
+      <figure class="viz" data-viz="pageFaultPipeline">
+        <figcaption>Figure 06 — Page Fault Pipeline: Allocate virtual memory, touch unallocated pages, and observe Resident Set Size (RSS) growth alongside Minor vs. Major fault counters.</figcaption>
+      </figure>
+    </section>
+
+    <section class="chapter" id="page-cache">
+      <div class="ch-meta"><span class="ch-num">07</span><span class="ch-tag">Page Cache</span></div>
+      <h3>Linux Page Cache Dynamics &amp; Dirty Memory Writeback</h3>
+      <p>The Linux <strong>Page Cache</strong> uses unallocated RAM to cache files read from and written to storage. When a process writes data, the kernel writes into page cache memory and marks the pages <strong>dirty</strong>, allowing the <code>write()</code> syscall to return instantly.</p>
+      <p>Background kernel threads (<code>kworker/flush</code>) periodically flush dirty pages to storage. The flush behavior is governed by two critical sysctl thresholds:</p>
+      <ul>
+        <li><code>vm.dirty_background_ratio</code> (default 10%): When dirty memory crosses this threshold, background kernel flush threads wake up to write data to disk asynchronously.</li>
+        <li><code>vm.dirty_ratio</code> (default 20%): When dirty memory crosses this hard ceiling, user-space processes calling <code>write()</code> are frozen and forced into synchronous writeout until dirty memory drops below the threshold!</li>
+      </ul>
+      <figure class="viz" data-viz="pageCacheWriteback">
+        <figcaption>Figure 07 — Page Cache Writeback Lab: Write dirty memory bursts into the Linux page cache, observe asynchronous background flush triggers, and simulate dirty_ratio write throttling.</figcaption>
+      </figure>
+    </section>
+
+    <section class="chapter" id="slab-allocator">
+      <div class="ch-meta"><span class="ch-num">08</span><span class="ch-tag">Kernel Memory</span></div>
+      <h3>SLUB Allocator &amp; Kernel Object Caching</h3>
+      <p>While the kernel Buddy Allocator manages memory in coarse 4KB page frames, kernel internal data structures (such as <code>task_struct</code>, <code>inode</code>, <code>dentry</code>, and <code>mm_struct</code>) are typically only tens to hundreds of bytes. Allocating full 4KB pages would cause catastrophic internal memory fragmentation.</p>
+      <p>The Linux <strong>SLUB Allocator</strong> carves page frames into uniform object slots. Each slab maintains an in-line freelist pointer chain. Allocating an object requires popping the head pointer in $O(1)$ time without taking coarse page-allocator locks, guaranteeing warm L1/L2 cache locality for frequent kernel object lifecycles.</p>
+      <figure class="viz" data-viz="slabAllocator">
+        <figcaption>Figure 08 — SLUB Allocator Simulator: Slice 4KB page frames into uniform object caches, allocate and free kernel structs, and trace per-CPU freelist chains.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ====================================================================
+         PART III: BLOCK I/O & MODERN STORAGE
+         ==================================================================== -->
+    <header class="part-header">
+      <span class="part-eyebrow">Part III</span>
+      <h2>Block I/O &amp; Modern Storage</h2>
+      <p class="part-desc">How Linux handles storage input/output: the multi-queue block layer (blk-mq), lockless shared-memory rings in io_uring, and eBPF block latency profiling.</p>
+    </header>
+
+    <section class="chapter" id="block-io">
+      <div class="ch-meta"><span class="ch-num">09</span><span class="ch-tag">Block Layer</span></div>
+      <h3>The Linux Block I/O Layer &amp; Multi-Queue (blk-mq) Architecture</h3>
+      <p>In traditional Linux kernels, all block I/O requests funneled through a single global request queue protected by a single lock—creating an impossible bottleneck on multi-core servers with high-speed SSDs. The modern <strong>Multi-Queue Block Layer (blk-mq)</strong> solves this with a two-tier queue hierarchy:</p>
+      <ul>
+        <li><strong>Software Staging Queues:</strong> Allocated per-CPU core, allowing threads to submit I/O requests concurrently with zero cross-core locking.</li>
+        <li><strong>Hardware Dispatch Queues:</strong> Mapped directly to the multi-queue hardware submission queues of NVMe controllers.</li>
+      </ul>
+      <p>I/O schedulers like <code>mq-deadline</code> and <code>BFQ</code> operate between these tiers, merging adjacent sectors to maximize sequential burst throughput.</p>
+      <figure class="viz" data-viz="blockIoQueue">
+        <figcaption>Figure 09 — Linux Block I/O Layer: Trace BIO submissions from file systems into blk-mq per-CPU software staging queues and hardware NVMe dispatch rings.</figcaption>
+      </figure>
+    </section>
+
+    <section class="chapter" id="io-uring">
+      <div class="ch-meta"><span class="ch-num">10</span><span class="ch-tag">Async I/O</span></div>
+      <h3>Modern High-Throughput Linux I/O: <code>io_uring</code> Ring Buffers</h3>
+      <p>Introduced by Jens Axboe in Linux 5.1, <strong><code>io_uring</code></strong> provides true zero-copy asynchronous I/O across storage files, network sockets, and timer events. Unlike legacy POSIX AIO or <code>epoll</code>, <code>io_uring</code> communicates via two lockless ring buffers mapped into shared memory between user-space and kernel:</p>
+      <ul>
+        <li><strong>Submission Queue (SQ):</strong> The application writes Submission Queue Entries (SQEs) to the ring buffer. In polling mode (<code>IORING_SETUP_SQPOLL</code>), a kernel thread reaps SQEs automatically—eliminating system call context switches entirely!</li>
+        <li><strong>Completion Queue (CQ):</strong> The kernel posts Completion Queue Entries (CQEs) as hardware operations finish, ready for instant consumption by user space.</li>
+      </ul>
+      <figure class="viz" data-viz="ioUringRing">
+        <figcaption>Figure 10 — io_uring Lockless Ring Buffers: Submit asynchronous operations to the Submission Queue (SQ) and observe kernel reaping and Completion Queue (CQ) posting.</figcaption>
+      </figure>
+    </section>
+
+    <section class="chapter" id="ebpf-latency">
+      <div class="ch-meta"><span class="ch-num">11</span><span class="ch-tag">Latency Histograms</span></div>
+      <h3>Disk Latency Profiles &amp; eBPF <code>biolatency</code> Histograms</h3>
+      <p>Average latency (such as reported by <code>iostat</code>) is notoriously deceptive: an average disk latency of 2ms can easily conceal a bimodal distribution where 99% of requests complete in 50 microseconds while 1% suffer 100ms controller garbage-collection stalls!</p>
+      <p>Using <strong>eBPF (Extended Berkeley Packet Filter)</strong> tools like Brendan Gregg's <code>biolatency</code>, engineers instrument the kernel block layer at zero runtime overhead. eBPF instruments the request issue and device completion tracepoints, recording request duration into in-kernel log2 histogram maps.</p>
+      <figure class="viz" data-viz="ebpfDiskLatency">
+        <figcaption>Figure 11 — eBPF biolatency Histogram: Sample block I/O latency distributions in real time, inject tail-latency outliers, and uncover bimodal disk stalls.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ====================================================================
+         PART IV: NETWORKING & KERNEL PROFILING
+         ==================================================================== -->
+    <header class="part-header">
+      <span class="part-eyebrow">Part IV</span>
+      <h2>Networking &amp; Kernel Profiling</h2>
+      <p class="part-desc">How Linux processes millions of packets per second, manages TCP buffer autotuning, verifies eBPF bytecode safety, and visualizes CPU stack profiles via Flame Graphs.</p>
+    </header>
+
+    <section class="chapter" id="network-napi">
+      <div class="ch-meta"><span class="ch-num">12</span><span class="ch-tag">Network RX/TX</span></div>
+      <h3>Linux Network RX Path: Ring Buffers, NAPI Polling &amp; SoftIRQs</h3>
+      <p>When high-speed network interfaces receive hundreds of thousands of packets per second, handling each packet with a dedicated hardware CPU interrupt triggers an <strong>Interrupt Storm</strong>, starving user-space applications of CPU cycles.</p>
+      <p>The Linux <strong>New API (NAPI)</strong> subsystem uses hybrid polling: the first packet triggers a hardware interrupt, which schedules the network softirq (<code>net_rx_action</code>) and immediately <em>disables further hardware interrupts</em> on the NIC. The kernel then polls and drains up to 64 packets per poll budget from the DMA ring buffer. If packets remain, the softirq daemon (<code>ksoftirqd</code>) continues processing without context switching into interrupt handlers.</p>
+      <figure class="viz" data-viz="networkNapiRing">
+        <figcaption>Figure 12 — Linux Network RX Path: Compare legacy per-packet interrupt storms against NAPI hybrid softirq polling across NIC DMA rings.</figcaption>
+      </figure>
+    </section>
+
+    <section class="chapter" id="sk-buff">
+      <div class="ch-meta"><span class="ch-num">13</span><span class="ch-tag">TCP Tuning</span></div>
+      <h3>Socket Buffers (<code>sk_buff</code>) &amp; TCP Buffer Autotuning</h3>
+      <p>To saturate high-speed long-distance network links, the TCP sliding window must equal or exceed the <strong>Bandwidth-Delay Product (BDP)</strong> of the connection:</p>
+      $$\text{BDP} = \text{Bandwidth (bits/sec)} \times \text{Round-Trip Time (sec)}$$
+      <p>If socket buffers (<code>tcp_rmem</code> and <code>tcp_wmem</code>) are capped smaller than the BDP, the sender will stall waiting for ACKs before filling the physical bandwidth capacity of the link. Linux dynamic TCP buffer autotuning automatically expands socket receive and send windows up to configured maximum limits to match active network BDP.</p>
+      <figure class="viz" data-viz="skBuffTuning">
+        <figcaption>Figure 13 — TCP Bandwidth-Delay Product &amp; Buffer Tuning: Adjust RTT latency and link bandwidth, observe socket buffer starvation stalls, and autotune tcp_rmem limits.</figcaption>
+      </figure>
+    </section>
+
+    <section class="chapter" id="ebpf-engine">
+      <div class="ch-meta"><span class="ch-num">14</span><span class="ch-tag">Kernel Programmability</span></div>
+      <h3>eBPF Architecture: Verifier, JIT Compiler &amp; Kernel Maps</h3>
+      <p><strong>eBPF (Extended Berkeley Packet Filter)</strong> is an in-kernel virtual machine that allows running sandboxed user-written bytecode directly inside the Linux kernel without modifying kernel source code or loading risky kernel modules.</p>
+      <p>Before any eBPF program is loaded, the kernel passes it through the <strong>eBPF Verifier</strong>. The verifier traverses the Directed Acyclic Graph (DAG) of all possible code paths, proving mathematical invariants: the program must terminate (no unbounded loops), must not dereference uninitialized or out-of-bounds pointers, and must not leak kernel memory. Once verified, an in-kernel JIT compiler converts the bytecode into native machine code.</p>
+      <figure class="viz" data-viz="ebpfEngine">
+        <figcaption>Figure 14 — eBPF Safety Verifier &amp; JIT Pipeline: Attach eBPF bytecode to kprobes and tracepoints, simulate verifier safety rejections, and inspect BPF map storage.</figcaption>
+      </figure>
+    </section>
+
+    <section class="chapter" id="flame-graphs">
+      <div class="ch-meta"><span class="ch-num">15</span><span class="ch-tag">Visualization</span></div>
+      <h3>Profiling with Flame Graphs: On-CPU vs. Off-CPU Analysis</h3>
+      <p>Invented by Brendan Gregg, <strong>Flame Graphs</strong> are the premier visualization for systems performance profiling. Stack traces are sampled (e.g. via <code>perf record -F 99 -g</code>), folded into aggregated hierarchies, and rendered as stacked rectangles:</p>
+      <ul>
+        <li><strong>X-axis:</strong> Represents the entire sample population sorted alphabetically (not passage of time). The wider a box, the more frequently that function was on the stack.</li>
+        <li><strong>Y-axis:</strong> Shows stack depth. The top-most boxes represent the functions actively executing at sample time.</li>
+      </ul>
+      <p>Crucially, <strong>On-CPU profiling</strong> reveals compute churn and algorithmic bottlenecks, while <strong>Off-CPU profiling</strong> (measuring time spent blocked in <code>schedule()</code>) reveals lock contention, file I/O delays, and network socket stalls!</p>
+      <figure class="viz" data-viz="flameGraphExplorer">
+        <figcaption>Figure 15 — Interactive Flame Graph Explorer: Toggle between On-CPU execution profiles and Off-CPU blocking stalls, inspect hot frames, and trace stack hierarchies.</figcaption>
+      </figure>
+    </section>
+
+  </main>
+</div>
+
+<footer class="site-foot">
+  <p><strong>Systems Performance &amp; Linux Kernel Internals, Flame by Flame</strong> — An open-source interactive architectural guide.</p>
+  <p>Curricular sources: Brendan Gregg (<em>Systems Performance</em> &amp; <em>BPF Performance Tools</em>), Michael Kerrisk (<em>The Linux Programming Interface</em>), Robert Love (<em>Linux Kernel Development</em>).</p>
+</footer>
+
+<script src="assets/core.js"></script>
+<script src="assets/viz-cpu-scheduling.js"></script>
+<script src="assets/viz-memory-paging.js"></script>
+<script src="assets/viz-io-networking-ebpf.js"></script>
+<script>
+  window.addEventListener('DOMContentLoaded', () => {
+    if (window.OS && window.OS.boot) {
+      window.OS.boot();
+    }
+  });
+</script>
+</body>
+</html>
