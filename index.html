@@ -9,6 +9,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"
+          onload="if (typeof renderMathInElement === 'function') renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}], throwOnError: false});"></script>
 </head>
 <body>
 
@@ -75,7 +79,7 @@
     </header>
 
     <section class="chapter" id="cfs-scheduler">
-      <div class="ch-meta"><span class="ch-num">01</span><span class="ch-tag">Scheduler Math</span></div>
+      <div class="ch-meta"><span class="ch-num">01</span> <span class="ch-tag">Scheduler Math</span></div>
       <h3>Completely Fair Scheduler (CFS) &amp; <code>vruntime</code> Red-Black Tree</h3>
       <p>The Linux <strong>Completely Fair Scheduler (CFS)</strong> models an "ideal multi-tasking CPU" on hardware. Instead of traditional fixed time slices, CFS tracks the <strong>virtual runtime (<code>vruntime</code>)</strong> of each runnable task. Tasks are stored in a self-balancing Red-Black Tree keyed by <code>vruntime</code>.</p>
       <p>When a CPU core finishes executing a quantum, the kernel picks the leftmost task in the tree (the task that has consumed the least proportional execution time). When task $i$ runs for physical time $\Delta_{\text{exec}}$, its virtual runtime advances according to its nice level weight:</p>
@@ -87,7 +91,7 @@
     </section>
 
     <section class="chapter" id="context-switch">
-      <div class="ch-meta"><span class="ch-num">02</span><span class="ch-tag">CPU Overhead</span></div>
+      <div class="ch-meta"><span class="ch-num">02</span> <span class="ch-tag">CPU Overhead</span></div>
       <h3>Context Switching Latency, Runqueues &amp; CPU Affinity</h3>
       <p>A context switch occurs when the kernel preempts a running process to execute another. Context switches fall into two distinct categories:</p>
       <ul>
@@ -101,7 +105,7 @@
     </section>
 
     <section class="chapter" id="perf-counters">
-      <div class="ch-meta"><span class="ch-num">03</span><span class="ch-tag">PMU Profiling</span></div>
+      <div class="ch-meta"><span class="ch-num">03</span> <span class="ch-tag">PMU Profiling</span></div>
       <h3>Hardware Performance Counters (PMU) &amp; Topdown Analysis</h3>
       <p>Modern microprocessors contain dedicated <strong>Performance Monitoring Units (PMUs)</strong> capable of counting low-level microarchitectural events (CPU cycles, instructions retired, cache misses, branch mispredictions) without software instrumentation overhead.</p>
       <p>The industry-standard <strong>Topdown Microarchitecture Analysis Method (Ahmad Yasin, Intel)</strong> categorizes every pipeline execution slot into four mutually exclusive buckets:</p>
@@ -117,7 +121,7 @@
     </section>
 
     <section class="chapter" id="cfs-throttling">
-      <div class="ch-meta"><span class="ch-num">04</span><span class="ch-tag">cgroups v2</span></div>
+      <div class="ch-meta"><span class="ch-num">04</span> <span class="ch-tag">cgroups v2</span></div>
       <h3>Linux CPU Throttling: CFS Bandwidth Control &amp; cgroups v2</h3>
       <p>In containerized production environments (Kubernetes, Docker), CPU limits are enforced via <strong>cgroups CFS Bandwidth Control</strong> (<code>cpu.max = quota period</code>, typically <code>quota / 100000</code>). When a container consumes its entire quota before the end of the 100ms period, the Linux kernel completely suspends all container threads until the next period begins.</p>
       <p>This causes catastrophic tail latency spikes (e.g. p99 jumping from 5ms to 80ms) even when average CPU utilization across the node is only 25%! Systems engineers monitor <code>/sys/fs/cgroup/cpu.stat</code> (<code>nr_throttled</code> and <code>throttled_usec</code>) to detect quota starvation.</p>
@@ -136,7 +140,7 @@
     </header>
 
     <section class="chapter" id="tlb-shootdown">
-      <div class="ch-meta"><span class="ch-num">05</span><span class="ch-tag">Virtual Memory</span></div>
+      <div class="ch-meta"><span class="ch-num">05</span> <span class="ch-tag">Virtual Memory</span></div>
       <h3>Page Tables, Translation Lookaside Buffer &amp; TLB Shootdowns</h3>
       <p>On x86_64 architecture, translating a 48-bit virtual address to a physical RAM address requires walking a 4-level hierarchical page table structure: <strong>PML4 $\rightarrow$ PDPT $\rightarrow$ PD $\rightarrow$ PT</strong>. A page walk costs up to 4 sequential DRAM reads ($\approx 150\text{--}200\text{ cycles}$).</p>
       <p>The <strong>Translation Lookaside Buffer (TLB)</strong> caches these translations, delivering single-cycle address lookups. However, when a thread frees or remaps memory (via <code>munmap()</code> or compaction), the kernel must guarantee no other CPU core holds stale translations in its local TLB. The kernel initiates a <strong>TLB Shootdown</strong>, sending Inter-Processor Interrupts (IPIs) across the memory bus to stall all remote cores until they flush their local TLB entries.</p>
@@ -146,7 +150,7 @@
     </section>
 
     <section class="chapter" id="page-fault">
-      <div class="ch-meta"><span class="ch-num">06</span><span class="ch-tag">Page Faults</span></div>
+      <div class="ch-meta"><span class="ch-num">06</span> <span class="ch-tag">Page Faults</span></div>
       <h3>The Page Fault Pipeline: Minor vs. Major Faults &amp; RSS</h3>
       <p>When an application calls <code>malloc()</code> or <code>mmap()</code>, the kernel modifies the process Virtual Memory Area (VMA) but allocates <em>zero physical memory</em>. Physical RAM is allocated lazily on the first byte read or write, triggering a Hardware Page Fault interrupt:</p>
       <ul>
@@ -159,7 +163,7 @@
     </section>
 
     <section class="chapter" id="page-cache">
-      <div class="ch-meta"><span class="ch-num">07</span><span class="ch-tag">Page Cache</span></div>
+      <div class="ch-meta"><span class="ch-num">07</span> <span class="ch-tag">Page Cache</span></div>
       <h3>Linux Page Cache Dynamics &amp; Dirty Memory Writeback</h3>
       <p>The Linux <strong>Page Cache</strong> uses unallocated RAM to cache files read from and written to storage. When a process writes data, the kernel writes into page cache memory and marks the pages <strong>dirty</strong>, allowing the <code>write()</code> syscall to return instantly.</p>
       <p>Background kernel threads (<code>kworker/flush</code>) periodically flush dirty pages to storage. The flush behavior is governed by two critical sysctl thresholds:</p>
@@ -173,7 +177,7 @@
     </section>
 
     <section class="chapter" id="slab-allocator">
-      <div class="ch-meta"><span class="ch-num">08</span><span class="ch-tag">Kernel Memory</span></div>
+      <div class="ch-meta"><span class="ch-num">08</span> <span class="ch-tag">Kernel Memory</span></div>
       <h3>SLUB Allocator &amp; Kernel Object Caching</h3>
       <p>While the kernel Buddy Allocator manages memory in coarse 4KB page frames, kernel internal data structures (such as <code>task_struct</code>, <code>inode</code>, <code>dentry</code>, and <code>mm_struct</code>) are typically only tens to hundreds of bytes. Allocating full 4KB pages would cause catastrophic internal memory fragmentation.</p>
       <p>The Linux <strong>SLUB Allocator</strong> carves page frames into uniform object slots. Each slab maintains an in-line freelist pointer chain. Allocating an object requires popping the head pointer in $O(1)$ time without taking coarse page-allocator locks, guaranteeing warm L1/L2 cache locality for frequent kernel object lifecycles.</p>
@@ -192,7 +196,7 @@
     </header>
 
     <section class="chapter" id="block-io">
-      <div class="ch-meta"><span class="ch-num">09</span><span class="ch-tag">Block Layer</span></div>
+      <div class="ch-meta"><span class="ch-num">09</span> <span class="ch-tag">Block Layer</span></div>
       <h3>The Linux Block I/O Layer &amp; Multi-Queue (blk-mq) Architecture</h3>
       <p>In traditional Linux kernels, all block I/O requests funneled through a single global request queue protected by a single lock—creating an impossible bottleneck on multi-core servers with high-speed SSDs. The modern <strong>Multi-Queue Block Layer (blk-mq)</strong> solves this with a two-tier queue hierarchy:</p>
       <ul>
@@ -206,7 +210,7 @@
     </section>
 
     <section class="chapter" id="io-uring">
-      <div class="ch-meta"><span class="ch-num">10</span><span class="ch-tag">Async I/O</span></div>
+      <div class="ch-meta"><span class="ch-num">10</span> <span class="ch-tag">Async I/O</span></div>
       <h3>Modern High-Throughput Linux I/O: <code>io_uring</code> Ring Buffers</h3>
       <p>Introduced by Jens Axboe in Linux 5.1, <strong><code>io_uring</code></strong> provides true zero-copy asynchronous I/O across storage files, network sockets, and timer events. Unlike legacy POSIX AIO or <code>epoll</code>, <code>io_uring</code> communicates via two lockless ring buffers mapped into shared memory between user-space and kernel:</p>
       <ul>
@@ -219,7 +223,7 @@
     </section>
 
     <section class="chapter" id="ebpf-latency">
-      <div class="ch-meta"><span class="ch-num">11</span><span class="ch-tag">Latency Histograms</span></div>
+      <div class="ch-meta"><span class="ch-num">11</span> <span class="ch-tag">Latency Histograms</span></div>
       <h3>Disk Latency Profiles &amp; eBPF <code>biolatency</code> Histograms</h3>
       <p>Average latency (such as reported by <code>iostat</code>) is notoriously deceptive: an average disk latency of 2ms can easily conceal a bimodal distribution where 99% of requests complete in 50 microseconds while 1% suffer 100ms controller garbage-collection stalls!</p>
       <p>Using <strong>eBPF (Extended Berkeley Packet Filter)</strong> tools like Brendan Gregg's <code>biolatency</code>, engineers instrument the kernel block layer at zero runtime overhead. eBPF instruments the request issue and device completion tracepoints, recording request duration into in-kernel log2 histogram maps.</p>
@@ -238,7 +242,7 @@
     </header>
 
     <section class="chapter" id="network-napi">
-      <div class="ch-meta"><span class="ch-num">12</span><span class="ch-tag">Network RX/TX</span></div>
+      <div class="ch-meta"><span class="ch-num">12</span> <span class="ch-tag">Network RX/TX</span></div>
       <h3>Linux Network RX Path: Ring Buffers, NAPI Polling &amp; SoftIRQs</h3>
       <p>When high-speed network interfaces receive hundreds of thousands of packets per second, handling each packet with a dedicated hardware CPU interrupt triggers an <strong>Interrupt Storm</strong>, starving user-space applications of CPU cycles.</p>
       <p>The Linux <strong>New API (NAPI)</strong> subsystem uses hybrid polling: the first packet triggers a hardware interrupt, which schedules the network softirq (<code>net_rx_action</code>) and immediately <em>disables further hardware interrupts</em> on the NIC. The kernel then polls and drains up to 64 packets per poll budget from the DMA ring buffer. If packets remain, the softirq daemon (<code>ksoftirqd</code>) continues processing without context switching into interrupt handlers.</p>
@@ -248,7 +252,7 @@
     </section>
 
     <section class="chapter" id="sk-buff">
-      <div class="ch-meta"><span class="ch-num">13</span><span class="ch-tag">TCP Tuning</span></div>
+      <div class="ch-meta"><span class="ch-num">13</span> <span class="ch-tag">TCP Tuning</span></div>
       <h3>Socket Buffers (<code>sk_buff</code>) &amp; TCP Buffer Autotuning</h3>
       <p>To saturate high-speed long-distance network links, the TCP sliding window must equal or exceed the <strong>Bandwidth-Delay Product (BDP)</strong> of the connection:</p>
       $$\text{BDP} = \text{Bandwidth (bits/sec)} \times \text{Round-Trip Time (sec)}$$
@@ -259,7 +263,7 @@
     </section>
 
     <section class="chapter" id="ebpf-engine">
-      <div class="ch-meta"><span class="ch-num">14</span><span class="ch-tag">Kernel Programmability</span></div>
+      <div class="ch-meta"><span class="ch-num">14</span> <span class="ch-tag">Kernel Programmability</span></div>
       <h3>eBPF Architecture: Verifier, JIT Compiler &amp; Kernel Maps</h3>
       <p><strong>eBPF (Extended Berkeley Packet Filter)</strong> is an in-kernel virtual machine that allows running sandboxed user-written bytecode directly inside the Linux kernel without modifying kernel source code or loading risky kernel modules.</p>
       <p>Before any eBPF program is loaded, the kernel passes it through the <strong>eBPF Verifier</strong>. The verifier traverses the Directed Acyclic Graph (DAG) of all possible code paths, proving mathematical invariants: the program must terminate (no unbounded loops), must not dereference uninitialized or out-of-bounds pointers, and must not leak kernel memory. Once verified, an in-kernel JIT compiler converts the bytecode into native machine code.</p>
@@ -269,7 +273,7 @@
     </section>
 
     <section class="chapter" id="flame-graphs">
-      <div class="ch-meta"><span class="ch-num">15</span><span class="ch-tag">Visualization</span></div>
+      <div class="ch-meta"><span class="ch-num">15</span> <span class="ch-tag">Visualization</span></div>
       <h3>Profiling with Flame Graphs: On-CPU vs. Off-CPU Analysis</h3>
       <p>Invented by Brendan Gregg, <strong>Flame Graphs</strong> are the premier visualization for systems performance profiling. Stack traces are sampled (e.g. via <code>perf record -F 99 -g</code>), folded into aggregated hierarchies, and rendered as stacked rectangles:</p>
       <ul>
