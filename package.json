@@ -4,7 +4,9 @@
   "description": "Systems Performance & Linux Kernel Internals, Flame by Flame — An Explorable Architecture Guide to CPU Scheduling, Memory Subsystems, Block I/O, eBPF & Flame Graphs",
   "main": "index.html",
   "scripts": {
-    "test": "node tests/audit-all-widgets.js"
+    "test": "node tests/audit-all-widgets.js && python3 tests/e2e-browser-audit.py",
+    "test:unit": "node tests/audit-all-widgets.js",
+    "test:e2e": "python3 tests/e2e-browser-audit.py"
   },
   "keywords": [
     "systems-performance",
